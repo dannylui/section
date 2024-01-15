@@ -7,9 +7,7 @@ from openpyxl import workbook, load_workbook
 
 # x, y = hello("a")
 
-
-BmSect = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],'Width':[50,12,0.75,12],'Thickness/Height':[8,0.5,24,0.5]})
-
+# Calculates the section property of a I Section
 def Section_Prop(Section: pd.DataFrame, n: int = 8):
  
     y = []
@@ -71,7 +69,7 @@ def Section_Prop(Section: pd.DataFrame, n: int = 8):
     
     return Section, Modulus, Inertia
 
-
+# Get the last row in the excel
 def get_max_row(xlName, xlsheetname):
 
     wb = load_workbook(xlName)
@@ -85,9 +83,8 @@ def get_max_row(xlName, xlsheetname):
 
     return ws.max_row
 
-
-
-def ProptoExcel(xlName, xlsheetname, Section, n = 8):
+# Printing the section properties to Excel
+def Prop_to_Excel(xlName, xlsheetname, Section, n = 8):
 
     BmTable, BmModulus, BmInertia = Section_Prop(Section, n)
    
@@ -113,14 +110,98 @@ def ProptoExcel(xlName, xlsheetname, Section, n = 8):
     
         BmModulus.to_excel(writer, sheet_name = xlsheetname, startrow = get_max_row(xlName, xlsheetname) + 2, startcol = 5,header=True, index=False)
 
+#Calculating Vp
+def Plastic_Shear_Vp(Geom_Input: dict):
+    return 0.58 * Geom_Input['fyw'] * Geom_Input['D_web'] * Geom_Input['t_web']
+
+# returns true if stiffened, false if not. Assume no longitudinal stiffener
+def is_stiffened(Geom_Input: dict, Stiff_input: dict):
+    if Stiff_input['Panel'] == 'Interior' and Stiff_input['Spacing d0'] <= Geom_Input['D_web'] * 3:
+        print ("Check stiffened capacity using 6.10.9.3")
+        return True
+    elif Stiff_input['Panel'] == 'End' and Stiff_input['Spacing d0'] <= Geom_Input['D_web'] * 1.5:
+        print ("Check stiffened capacity using 6.10.9.3.3")
+        return True
+    else:
+        print ("Check unstiffened capacity using 6.10.9.2")
+        return False
         
+def Shear_buckling_k (Geom_Input, Stiff_input):
+    if not is_stiffened(Geom_Input, Stiff_input):
+        return 5
+    else:
+        return 5 + 5 / (Stiff_input['Spacing d0'] / Geom_Input['D_web']) ** 2
 
-xlFilename = "SectionProp.xlsx"
-xlSheet = "Section99"
+def ratio_C(Geom_Input, Stiff_input):
+    D = Geom_Input['D_web']
+    tw = Geom_Input['t_web']
+    E = Geom_Input['E']
+    Fyw = Geom_Input['fyw']
+    k = Shear_buckling_k(Geom_Input, Stiff_input)
 
-ProptoExcel(xlFilename, xlSheet, BmSect, 0)
-ProptoExcel(xlFilename, xlSheet, BmSect, 8)
-ProptoExcel(xlFilename, xlSheet, BmSect, 24)
+    if D/tw <= 1.12 * (E * k / Fyw) ** 0.5:
+        return 1
+    elif D/tw < 1.4* (E * k / Fyw) ** 0.5:
+        return 1.12 / (D / tw) * (E * k / Fyw) ** 0.5
+    else:
+        return 1.57 / ((D / tw) ** 2) * (E * k / Fyw)
+    
+
+def capacity_Vn (Geom_Input, Stiff_input):
+    D = Geom_Input['D_web']
+    tw = Geom_Input['t_web']
+    ttf = Geom_Input['t_tf']
+    btf = Geom_Input['b_tf']
+    tbf = Geom_Input['t_bf']
+    bbf = Geom_Input['b_bf']
+
+    C = ratio_C(Geom_Input, Stiff_input)
+
+    if Stiff_input['Panel'] == 'Interior':
+        if (2 * D * tw)/(btf*ttf + bbf * tbf) <= 2.5:             #AASHTO 6.10.9.3.2-1
+            return Plastic_Shear_Vp(Geom_Input) * (C + 0.87 * (1-C)/(1+(Stiff_input['Spacing d0'] / Geom_Input['D_web'])**2)**0.5)
+        else:
+           return Plastic_Shear_Vp(Geom_Input) * (C + 0.87 * (1-C)/(1+(Stiff_input['Spacing d0'] / Geom_Input['D_web'])**0.5 + (Stiff_input['Spacing d0'] / Geom_Input['D_web'])))
+    else: 
+         return Plastic_Shear_Vp(Geom_Input) * C
+
+
+
+
+Stiffener_Input = {'Stiffener': 'yes',  # Should be yes/no only 
+                   'Panel':'Interior',       # End/ Interior only
+                   'Spacing d0': 100}    # Spacing in inches
+
+Input = {'fyw':50, 'fyf':50, 'E':29000,'fc':4,
+         'b_slab':50, 't_slab':8,
+         'b_tf':12, 't_tf':0.5, 
+         'D_web':110, 't_web':0.75, 
+         'b_bf':12, 't_bf':0.5}
+
+
+BmSect = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
+                       'Width': [Input['b_slab'], Input['b_tf'], Input['t_web'], Input['b_bf']],
+                       'Thickness/Height':[Input['t_slab'],Input['t_tf'],Input['D_web'],Input['t_bf']]})
+
+print(Plastic_Shear_Vp(Input))
+
+print(is_stiffened(Input, Stiffener_Input))
+print("k = " + str(Shear_buckling_k(Input, Stiffener_Input)))
+
+print("C=" + str(ratio_C(Input, Stiffener_Input)))
+print("Vn=" + str(capacity_Vn(Input, Stiffener_Input)))
+
+# xlFilename = "SectionProp.xlsx"
+# xlSheet = "Section2"
+
+# Prop_to_Excel(xlFilename, xlSheet, BmSect, 0)
+# Prop_to_Excel(xlFilename, xlSheet, BmSect, 8)
+# Prop_to_Excel(xlFilename, xlSheet, BmSect, 24)
+
+
+
+
+
 
 # BmTable.to_excel(xlFilename, index=False, startcol=2)
 
