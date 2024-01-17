@@ -2,19 +2,14 @@ import pandas as pd
 
 from openpyxl import workbook, load_workbook
 
-# def hello(name, age=10):
-#     return "something", "else"
-
-# x, y = hello("a")
-
-# Calculates the section property of a I Section
-def Section_Prop(Section: pd.DataFrame, n: int = 8):
+# Calculates the elastic section property of a I Section
+def Elastic_Section_Prop(Section: pd.DataFrame, n: int = 8):
  
     y = []
     mod_ratio_n = []
 
     if n == 0:
-        Section = Section.drop([0]).reset_index()
+        Section = Section.drop([0]).reset_index(drop=True)
         print(Section["Width"] )
                       
 
@@ -41,7 +36,7 @@ def Section_Prop(Section: pd.DataFrame, n: int = 8):
     print(Section["Width"] * Section ["Thickness/Height"])
 
     Total = Section.sum()
-    Centroid = Total['AY'] / Total['Y']
+    Centroid = Total['AY'] / Total['Area']
 
     Section["D"] = Section["Y"] - Centroid
     Section["AD^2"] = Section["Area"] * Section["D"]**2
@@ -83,10 +78,10 @@ def get_max_row(xlName, xlsheetname):
 
     return ws.max_row
 
-# Printing the section properties to Excel
-def Prop_to_Excel(xlName, xlsheetname, Section, n = 8):
+# Printing the elastic section properties to Excel
+def Elastic_Prop_to_Excel(xlName, xlsheetname, Section, n = 8):
 
-    BmTable, BmModulus, BmInertia = Section_Prop(Section, n)
+    BmTable, BmModulus, BmInertia = Elastic_Section_Prop(Section, n)
    
     with pd.ExcelWriter(xlFilename, engine='openpyxl', mode='a',if_sheet_exists="overlay") as writer:
         BmTable.to_excel(writer, sheet_name = xlsheetname, startrow = get_max_row(xlName, xlsheetname) + 2, index=False, startcol=2)
@@ -109,6 +104,7 @@ def Prop_to_Excel(xlName, xlsheetname, Section, n = 8):
     with pd.ExcelWriter(xlFilename, engine='openpyxl', mode='a',if_sheet_exists="overlay") as writer:
     
         BmModulus.to_excel(writer, sheet_name = xlsheetname, startrow = get_max_row(xlName, xlsheetname) + 2, startcol = 5,header=True, index=False)
+
 
 #Calculating Vp
 def Plastic_Shear_Vp(Geom_Input: dict):
@@ -182,39 +178,70 @@ def check_Vu(Vu, Vn):
     else:
         return "OK"
 
+# Calculating the plastic neutral axis for positive flexure
+# conservative ignore rebars for now - to be implemented later *****
+def PNA (Geom_Input: dict):
+    Ps = 0.85 * Geom_Input['fc'] *Geom_Input['b_slab']*Geom_Input[ 't_slab']        # Slab
+    Pt = Geom_Input['fy_bf'] * Geom_Input['b_bf'] * Geom_Input['t_bf']              # Bottom Flange/ tension
+    Pc = Geom_Input['fy_tf'] * Geom_Input['b_tf'] * Geom_Input['t_tf']              # Top Flange/ compression
+    Pw = Geom_Input['fyw'] * Geom_Input['D_web'] * Geom_Input['t_web']              # Web
 
-Stiffener_Input = {'Stiffener': 'yes',  # Should be yes/no only 
-                   'Panel':'Interior',       # End/ Interior only
-                   'Spacing d0': 300}    # Spacing in inches
+    Y_bar = 0
+    Mp = 0
 
-Input = {'fyw':50, 'fyf':50, 'E':29000,'fc':4,
-         'b_slab':50, 't_slab':8,
-         'b_tf':28, 't_tf':1.75, 
-         'D_web':110, 't_web':0.75, 
-         'b_bf':28, 't_bf':2}
+    if Pt + Pw >= Pc + Ps:      # in web
+        print("PNA is in the web")
+        Y_bar = Geom_Input['D_web']/2 * ((Pt-Pc-Ps)/Pw+1)
+    elif Pt + Pw + Pc >= Ps:    # in the top flange
+        print("PNA is in the top flange")
+        Y_bar = Geom_Input['t_tf']/2 * ((Pw + Pt - Ps)/Pc + 1)
+    else:
+        print("PNA is in the deck")
+        Y_bar = Geom_Input[ 't_slab']  * (Pw + Pt + Pc)/Ps
+    
+    return Y_bar
+
+# AASHTO 6.5.4.2
+Resist_factors_phi = {'phi_v':1.0,    #shear
+                      'phi_f':1.0 }   # Flexure
+
+Stiffener_Input = {'Stiffener': 'yes',      # Should be yes/no only 
+                   'Panel':'Interior',      # End/ Interior only
+                   'Spacing d0': 300}       # Spacing in inches
+
+Input = {'fyw':50, 'fy_tf':50, 'fy_bf':50, 'E':29000,
+         'fc':4, 
+         'b_slab':114, 't_slab':9,
+         'b_tf':16, 't_tf':1.0, 
+         'D_web':69, 't_web':0.5, 
+         'b_bf':18, 't_bf':1.75}
 
 
 BmSect = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
                        'Width': [Input['b_slab'], Input['b_tf'], Input['t_web'], Input['b_bf']],
                        'Thickness/Height':[Input['t_slab'],Input['t_tf'],Input['D_web'],Input['t_bf']]})
 
+#-----------------------
+
+# xlFilename = "SectionProp.xlsx"
+# xlSheet = "Sectio3"
+
+# Elastic_Prop_to_Excel(xlFilename, xlSheet, BmSect, 0)
+# Prop_to_Excel(xlFilename, xlSheet, BmSect, 8)
+# Prop_to_Excel(xlFilename, xlSheet, BmSect, 24)
+
+#----------------------
 # print(Plastic_Shear_Vp(Input))
 
 # print(is_stiffened(Input, Stiffener_Input))
 # print("k = " + str(Shear_buckling_k(Input, Stiffener_Input)))
 
 # print("C=" + str(ratio_C(Input, Stiffener_Input)))
-print("Vn=" + str(capacity_Vn(Input, Stiffener_Input)))
+# print("Vn=" + str(capacity_Vn(Input, Stiffener_Input)))
 
-# xlFilename = "SectionProp.xlsx"
-# xlSheet = "Section2"
+#--------------------
 
-# Prop_to_Excel(xlFilename, xlSheet, BmSect, 0)
-# Prop_to_Excel(xlFilename, xlSheet, BmSect, 8)
-# Prop_to_Excel(xlFilename, xlSheet, BmSect, 24)
-
-
-
+print(PNA(Input))
 
 
 
