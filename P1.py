@@ -10,7 +10,7 @@ def Elastic_Section_Prop(Section: pd.DataFrame, n: int = 8):
 
     if n == 0:
         Section = Section.drop([0]).reset_index(drop=True)
-        print(Section["Width"] )
+        # print(Section["Width"] )
                       
 
     # Calculates y 
@@ -32,8 +32,8 @@ def Elastic_Section_Prop(Section: pd.DataFrame, n: int = 8):
     Section["Y"] = y
     Section["AY"] = Section["Area"] * Section ["Y"] 
 
-    print(Section["Area"])
-    print(Section["Width"] * Section ["Thickness/Height"])
+    # print(Section["Area"])
+    # print(Section["Width"] * Section ["Thickness/Height"])
 
     Total = Section.sum()
     Centroid = Total['AY'] / Total['Area']
@@ -56,11 +56,11 @@ def Elastic_Section_Prop(Section: pd.DataFrame, n: int = 8):
 
     Modulus = pd.DataFrame({'Location':["Top","Bottom"],'Distance y':[Y_TOP,Y_BOT],'Section Modulus':[S_TOP,S_BOT ]})
 
-    print(Total)
+    # print(Total)
 
-    print(Section)
-    print(Modulus)
-    print(Inertia)
+    # print(Section)
+    # print(Modulus)
+    # print(Inertia)
     
     return Section, Modulus, Inertia
 
@@ -179,6 +179,7 @@ def check_Vu(Vu, Vn):
         return "OK"
 
 # Calculating the plastic neutral axis for positive flexure
+    # Ref AASHTO Table D6.1-1
 # conservative ignore rebars for now - to be implemented later *****
 def PNA (Geom_Input: dict):
     Ps = 0.85 * Geom_Input['fc'] *Geom_Input['b_slab']*Geom_Input[ 't_slab']        # Slab
@@ -191,31 +192,98 @@ def PNA (Geom_Input: dict):
 
     if Pt + Pw >= Pc + Ps:      # in web
         print("PNA is in the web")
-        Y_bar = Geom_Input['D_web']/2 * ((Pt-Pc-Ps)/Pw+1)
+        Y_bar = Geom_Input['D_web']/2 * ((Pt-Pc-Ps)/Pw+1)                   # PNA from the top of the web
+     
+        ds = Y_bar + Geom_Input['t_tf'] + Geom_Input['t_haunch'] + Geom_Input[ 't_slab'] / 2         # Distance from PNA to center of the slab 
+        dc = Y_bar + Geom_Input['t_tf'] / 2                 # Distance from PNA to center of the compression flange
+        dt = Geom_Input['D_web'] - Y_bar + Geom_Input['t_bf'] / 2         # Distance from PNA to center of the compression flange
+
+        Mp = Pw/(2 * Geom_Input['D_web']) * (Y_bar**2 + (Geom_Input['D_web']-Y_bar)**2) + (Ps*ds + Pc*dc + Pt * dt)
+        
+        print("ds = " + str(ds))
+        print("dw = " + str(dw))
+        print("dt = " + str(dt))
+        
+        print("Ybar = " + str(Y_bar))
+        print("Mp = " + str(Mp))
+
     elif Pt + Pw + Pc >= Ps:    # in the top flange
         print("PNA is in the top flange")
-        Y_bar = Geom_Input['t_tf']/2 * ((Pw + Pt - Ps)/Pc + 1)
+        Y_bar = Geom_Input['t_tf']/2 * ((Pw + Pt - Ps)/Pc + 1)  
+
+        ds = Y_bar + Geom_Input['t_haunch'] + Geom_Input['t_slab'] / 2         # Distance from PNA to center of the slab 
+        dw = Geom_Input['t_tf'] - Y_bar + Geom_Input['D_web'] / 2           # Distance from PNA to center of the web 
+        dt = Geom_Input['t_tf'] - Y_bar + Geom_Input['D_web'] + Geom_Input['t_bf'] / 2         # Distance from PNA to center of the compression flange
+        
+        Mp = Pc/(2 * Geom_Input['t_tf']) * (Y_bar**2 + (Geom_Input['t_tf']-Y_bar)**2) + (Ps*ds + Pw*dw + Pt * dt)
+        
+        print("ds = " + str(ds))
+        print("dw = " + str(dw))
+        print("dt = " + str(dt))
+
+        print("Ybar = " + str(Y_bar))
+        print("Mp = " + str(Mp))
+
     else:
         print("PNA is in the deck")
+
         Y_bar = Geom_Input[ 't_slab']  * (Pw + Pt + Pc)/Ps
+
+        dc = Geom_Input['t_slab'] - Y_bar + Geom_Input['t_haunch'] + Geom_Input['t_tf'] / 2                 # Distance from PNA to center of the compression flange
+        dw = Geom_Input['t_slab'] - Y_bar + Geom_Input['t_haunch'] + Geom_Input['t_tf'] + Geom_Input['D_web'] / 2           # Distance from PNA to center of the web 
+        dt = Geom_Input['t_slab'] - Y_bar + Geom_Input['t_haunch'] + Geom_Input['t_tf'] + Geom_Input['D_web'] + Geom_Input['t_bf'] / 2         # Distance from PNA to center of the compression flange
+        Mp = (Y_bar**2 * Ps)/ (2 * Geom_Input['t_slab']) + (Pc*dc + Pw*dw + Pt * dt)
+        
+        print("ds = " + str(ds))
+        print("dw = " + str(dw))
+        print("dt = " + str(dt))
+
+        print("Ybar = " + str(Y_bar))
+        print("Mp = " + str(Mp))
+
+    return Y_bar, Mp
+
+
+# n = modular ratio, eta = importance ratio
+def yield_moment (Geom_Input, n, eta):
+
+    _,S_NC,_ = Elastic_Section_Prop(Geom_Input, 0)
+    _,S_LT,_ = Elastic_Section_Prop(Geom_Input, 3*n)
+    _,S_ST,_ = Elastic_Section_Prop(Geom_Input, n)
     
-    return Y_bar
+    S_NC_bf = S_NC['Section Modulus'][1]
+    S_LT_bf = S_LT['Section Modulus'][1]
+    S_ST_bf = S_ST['Section Modulus'][1]
+
+
+    print(S_NC['Section Modulus'][0])
+    print(S_LT)
+    print(S_ST)
+
+    return None
 
 # AASHTO 6.5.4.2
-Resist_factors_phi = {'phi_v':1.0,    #shear
+Resist_factors_phi = {'phi_v':1.0,    # Shear
                       'phi_f':1.0 }   # Flexure
 
 Stiffener_Input = {'Stiffener': 'yes',      # Should be yes/no only 
                    'Panel':'Interior',      # End/ Interior only
                    'Spacing d0': 300}       # Spacing in inches
 
+# Input materials and geometry
 Input = {'fyw':50, 'fy_tf':50, 'fy_bf':50, 'E':29000,
          'fc':4, 
-         'b_slab':114, 't_slab':9,
-         'b_tf':16, 't_tf':1.0, 
-         'D_web':69, 't_web':0.5, 
-         'b_bf':18, 't_bf':1.75}
+         'b_slab':111, 't_slab':9, 't_haunch':4, 
+         'b_tf':20, 't_tf':1.0, 
+         'D_web':84, 't_web':0.5625, 
+         'b_bf':21, 't_bf':1.625}
 
+# Forces at section from analysis
+Forces = {'M_dc1': 12222, 'M_dc2': 12222,'M_dw': 12222,'M_LL': 12222}
+
+modular_ratio_n = 8       # modular ratio, Es/Ec
+
+Import_factor = 1     # importance factor, essential, etc
 
 BmSect = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
                        'Width': [Input['b_slab'], Input['b_tf'], Input['t_web'], Input['b_bf']],
@@ -241,8 +309,9 @@ BmSect = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
 
 #--------------------
 
-print(PNA(Input))
+# print(PNA(Input))
 
+print(yield_moment(BmSect, modular_ratio_n, Import_factor))
 
 
 # BmTable.to_excel(xlFilename, index=False, startcol=2)
