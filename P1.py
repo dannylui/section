@@ -48,9 +48,12 @@ def Elastic_Section_Prop(Section: pd.DataFrame, n: int = 8):
 
     BM_height = Total["Thickness/Height"]
 
-    Y_TOP = Centroid
-    Y_BOT = BM_height - Centroid
-
+    if Section.loc[0,"Element"] == 'Slab':
+        BM_height -= Section.loc[0,'Thickness/Height']
+      
+    Y_BOT = Total["Thickness/Height"] - Centroid
+    Y_TOP = BM_height - Y_BOT
+    
     S_TOP = Inertia / Y_TOP
     S_BOT = Inertia / Y_BOT
 
@@ -105,6 +108,14 @@ def Elastic_Prop_to_Excel(xlName, xlsheetname, Section, n = 8):
     
         BmModulus.to_excel(writer, sheet_name = xlsheetname, startrow = get_max_row(xlName, xlsheetname) + 2, startcol = 5,header=True, index=False)
 
+#AASHTO 6.10.2.1
+def web_proportion_chk(Geom_Input):
+    if Geom_Input['Long stiffener'] == 'no':
+        return Geom_Input['D_web'] / Geom_Input['t_web'] <= 150
+    else:
+        return Geom_Input['D_web'] / Geom_Input['t_web'] <= 300
+
+
 
 #Calculating Vp
 def Plastic_Shear_Vp(Geom_Input: dict):
@@ -131,7 +142,8 @@ def Shear_buckling_k (Geom_Input, Stiff_input):
         print("Calculate k per AASHTO 6.10.9.3.2-7")
         return 5 + 5 / (Stiff_input['Spacing d0'] / Geom_Input['D_web']) ** 2
 
-# Calculate Shear-buckling resistance tot he shear yield Strength
+# Calculate Shear-buckling resistance to the shear yield Strength
+    #AASHTO 6.10.9.3.2
 def ratio_C(Geom_Input, Stiff_input):
     D = Geom_Input['D_web']
     tw = Geom_Input['t_web']
@@ -243,43 +255,65 @@ def PNA (Geom_Input: dict):
 
     return Y_bar, Mp
 
+def check_compactness(Geom_Input):
+
+    
+    
+    
+
+    return None
 
 # n = modular ratio, eta = importance ratio
-def yield_moment (Geom_Input, n, eta):
+# AASHTO D6.2.2
+def yield_moment (Geom_Input, Forces_input, n, eta):
 
-    _,S_NC,_ = Elastic_Section_Prop(Geom_Input, 0)
-    _,S_LT,_ = Elastic_Section_Prop(Geom_Input, 3*n)
-    _,S_ST,_ = Elastic_Section_Prop(Geom_Input, n)
+    Section = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
+                       'Width': [Geom_Input['b_slab'], Geom_Input['b_tf'], Geom_Input['t_web'], Geom_Input['b_bf']],
+                       'Thickness/Height':[Geom_Input['t_slab'],Geom_Input['t_tf'],Geom_Input['D_web'],Geom_Input['t_bf']]})
     
+    _,S_NC,_ = Elastic_Section_Prop(Section, 0)
+    _,S_LT,_ = Elastic_Section_Prop(Section, 3*n)
+    _,S_ST,_ = Elastic_Section_Prop(Section, n)
+
+ # Bottom Flange    
     S_NC_bf = S_NC['Section Modulus'][1]
     S_LT_bf = S_LT['Section Modulus'][1]
     S_ST_bf = S_ST['Section Modulus'][1]
 
+    MAD_bf = (Geom_Input['fy_bf'] / eta - 1.25 * Forces_input['M_dc1']/S_NC_bf - (1.25 * Forces_input['M_dc2'] + 1.5 * Forces_input['M_dw']) / S_LT_bf) * S_ST_bf
 
-    print(S_NC['Section Modulus'][0])
-    print(S_LT)
-    print(S_ST)
+    My_bf = 1.25 * Forces_input['M_dc1'] + 1.25 * Forces_input['M_dc2'] + 1.5 * Forces_input['M_dw'] + MAD_bf
 
-    return None
+ # Top Flange
+    S_NC_tf = S_NC['Section Modulus'][0]
+    S_LT_tf = S_LT['Section Modulus'][0]
+    S_ST_tf = S_ST['Section Modulus'][0]
+
+    MAD_tf = (Geom_Input['fy_tf'] / eta - 1.25 * Forces_input['M_dc1']/S_NC_tf - (1.25 * Forces_input['M_dc2'] + 1.5 * Forces_input['M_dw']) / S_LT_tf) * S_ST_tf
+
+    My_tf = 1.25 * Forces_input['M_dc1'] + 1.25 * Forces_input['M_dc2'] + 1.5 * Forces_input['M_dw'] + MAD_tf
+
+    return min(My_tf, My_bf)
 
 # AASHTO 6.5.4.2
 Resist_factors_phi = {'phi_v':1.0,    # Shear
                       'phi_f':1.0 }   # Flexure
 
-Stiffener_Input = {'Stiffener': 'yes',      # Should be yes/no only 
-                   'Panel':'Interior',      # End/ Interior only
+Stiffener_Input = {'Panel':'Interior',      # End/ Interior only
                    'Spacing d0': 300}       # Spacing in inches
+  
 
 # Input materials and geometry
 Input = {'fyw':50, 'fy_tf':50, 'fy_bf':50, 'E':29000,
-         'fc':4, 
-         'b_slab':111, 't_slab':9, 't_haunch':4, 
-         'b_tf':20, 't_tf':1.0, 
-         'D_web':84, 't_web':0.5625, 
-         'b_bf':21, 't_bf':1.625}
+         'fc':4,
+         'Long stiffener':'no', 'Trans stiffener': 'yes',      # Should be yes/no only 
+         'b_slab':114, 't_slab':9, 't_haunch':4, 
+         'b_tf':16, 't_tf':1.0, 
+         'D_web':69, 't_web':0.5, 
+         'b_bf':18, 't_bf':1.75}
 
 # Forces at section from analysis
-Forces = {'M_dc1': 12222, 'M_dc2': 12222,'M_dw': 12222,'M_LL': 12222}
+Forces = {'M_dc1': 2202*12, 'M_dc2': 335*12,'M_dw': 322*12,'M_LL': 12222}
 
 modular_ratio_n = 8       # modular ratio, Es/Ec
 
@@ -311,7 +345,7 @@ BmSect = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
 
 # print(PNA(Input))
 
-print(yield_moment(BmSect, modular_ratio_n, Import_factor))
+print(yield_moment(Input, Forces, modular_ratio_n, Import_factor)/12)
 
 
 # BmTable.to_excel(xlFilename, index=False, startcol=2)
