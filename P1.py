@@ -201,9 +201,11 @@ def PNA (Geom_Input: dict):
 
     Y_bar = 0
     Mp = 0
+    PNA_Loc = ''
 
     if Pt + Pw >= Pc + Ps:      # in web
         print("PNA is in the web")
+        PNA_Loc = 'Web'
         Y_bar = Geom_Input['D_web']/2 * ((Pt-Pc-Ps)/Pw+1)                   # PNA from the top of the web
      
         ds = Y_bar + Geom_Input['t_tf'] + Geom_Input['t_haunch'] + Geom_Input[ 't_slab'] / 2         # Distance from PNA to center of the slab 
@@ -221,6 +223,7 @@ def PNA (Geom_Input: dict):
 
     elif Pt + Pw + Pc >= Ps:    # in the top flange
         print("PNA is in the top flange")
+        PNA_Loc = 'Top Flange'
         Y_bar = Geom_Input['t_tf']/2 * ((Pw + Pt - Ps)/Pc + 1)  
 
         ds = Y_bar + Geom_Input['t_haunch'] + Geom_Input['t_slab'] / 2         # Distance from PNA to center of the slab 
@@ -238,6 +241,7 @@ def PNA (Geom_Input: dict):
 
     else:
         print("PNA is in the deck")
+        PNA_Loc = 'Slab'
 
         Y_bar = Geom_Input[ 't_slab']  * (Pw + Pt + Pc)/Ps
 
@@ -253,15 +257,32 @@ def PNA (Geom_Input: dict):
         print("Ybar = " + str(Y_bar))
         print("Mp = " + str(Mp))
 
-    return Y_bar, Mp
+    return Y_bar, Mp, PNA_Loc
 
+# AASHTO 6.10.6.2.2
 def check_compactness(Geom_Input):
+    
+    if Geom_Input['fy_tf'] <= 70 and Geom_Input['fy_bf'] <= 70:
+        print ("Flange strength is ok")
+    else:
+        print ("Flange strength is NG")
 
+    if web_proportion_chk(Geom_Input):
+        print('Web check per 6.10.2.1 is OK')
+    else:
+        print('Web check per 6.10.2.1 is NG')
     
+    Y_bar, _ , PNA_loc = PNA(Geom_Input)
+    Dcp = 0
     
-    
+    if PNA_loc == "Web":
+        Dcp = Y_bar
 
-    return None
+    if 2 * Dcp/Geom_Input['t_web'] <= 3.76 * (Geom_Input['E']/Geom_Input['fy_tf'])**0.5:
+        print('Web slenderness check is OK')
+    else:
+        print('Web slenderness check is NG')
+    return  None
 
 # n = modular ratio, eta = importance ratio
 # AASHTO D6.2.2
@@ -345,8 +366,9 @@ BmSect = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
 
 # print(PNA(Input))
 
-print(yield_moment(Input, Forces, modular_ratio_n, Import_factor)/12)
+# print(yield_moment(Input, Forces, modular_ratio_n, Import_factor)/12)
 
+check_compactness(Input)
 
 # BmTable.to_excel(xlFilename, index=False, startcol=2)
 
