@@ -2,9 +2,14 @@ import pandas as pd
 
 from openpyxl import workbook, load_workbook
 
+
 # Calculates the elastic section property of a I Section
-def Elastic_Section_Prop(Section: pd.DataFrame, n: int = 8):
- 
+def Elastic_Section_Prop(Geom_Input, n: int = 8):
+
+    Section = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
+                       'Width': [Geom_Input['b_slab'], Geom_Input['b_tf'], Geom_Input['t_web'], Geom_Input['b_bf']],
+                       'Thickness/Height':[Geom_Input['t_slab'],Geom_Input['t_tf'],Geom_Input['D_web'],Geom_Input['t_bf']]})
+
     y = []
     mod_ratio_n = []
 
@@ -67,6 +72,10 @@ def Elastic_Section_Prop(Section: pd.DataFrame, n: int = 8):
     
     return Section, Modulus, Inertia
 
+def calc_Ec(fc, K1=1, wc=0.150):
+
+    return 120000 * K1 * wc**2 * fc**0.33
+
 # Get the last row in the excel
 def get_max_row(xlName, xlsheetname):
 
@@ -82,9 +91,9 @@ def get_max_row(xlName, xlsheetname):
     return ws.max_row
 
 # Printing the elastic section properties to Excel
-def Elastic_Prop_to_Excel(xlName, xlsheetname, Section, n = 8):
+def Elastic_Prop_to_Excel(xlName, xlsheetname, Geom_Input, n = 8):
 
-    BmTable, BmModulus, BmInertia = Elastic_Section_Prop(Section, n)
+    BmTable, BmModulus, BmInertia = Elastic_Section_Prop(Geom_Input, n)
    
     with pd.ExcelWriter(xlFilename, engine='openpyxl', mode='a',if_sheet_exists="overlay") as writer:
         BmTable.to_excel(writer, sheet_name = xlsheetname, startrow = get_max_row(xlName, xlsheetname) + 2, index=False, startcol=2)
@@ -284,6 +293,12 @@ def check_compactness(Geom_Input):
         print('Web slenderness check is NG')
     return  None
 
+# AASHTO 6.10.7.3
+def check_ductility():
+
+
+
+    pass
 # n = modular ratio, eta = importance ratio
 # AASHTO D6.2.2
 def yield_moment (Geom_Input, Forces_input, n, eta):
@@ -292,9 +307,9 @@ def yield_moment (Geom_Input, Forces_input, n, eta):
                        'Width': [Geom_Input['b_slab'], Geom_Input['b_tf'], Geom_Input['t_web'], Geom_Input['b_bf']],
                        'Thickness/Height':[Geom_Input['t_slab'],Geom_Input['t_tf'],Geom_Input['D_web'],Geom_Input['t_bf']]})
     
-    _,S_NC,_ = Elastic_Section_Prop(Section, 0)
-    _,S_LT,_ = Elastic_Section_Prop(Section, 3*n)
-    _,S_ST,_ = Elastic_Section_Prop(Section, n)
+    _,S_NC,_ = Elastic_Section_Prop(Geom_Input, 0)
+    _,S_LT,_ = Elastic_Section_Prop(Geom_Input, 3*n)
+    _,S_ST,_ = Elastic_Section_Prop(Geom_Input, n)
 
  # Bottom Flange    
     S_NC_bf = S_NC['Section Modulus'][1]
@@ -340,9 +355,6 @@ modular_ratio_n = 8       # modular ratio, Es/Ec
 
 Import_factor = 1     # importance factor, essential, etc
 
-BmSect = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
-                       'Width': [Input['b_slab'], Input['b_tf'], Input['t_web'], Input['b_bf']],
-                       'Thickness/Height':[Input['t_slab'],Input['t_tf'],Input['D_web'],Input['t_bf']]})
 
 #-----------------------
 
@@ -369,6 +381,7 @@ BmSect = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
 # print(yield_moment(Input, Forces, modular_ratio_n, Import_factor)/12)
 
 check_compactness(Input)
+print(calc_Ec(fc=Input['fc']))
 
 # BmTable.to_excel(xlFilename, index=False, startcol=2)
 
