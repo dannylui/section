@@ -242,6 +242,7 @@ class Section_Properties():
         return Y_bar, Mp, PNA_Loc
     
     # AASHTO 6.10.6.2.2
+    #***************** Revise to return True/False
     def check_compactness(self):
         
         if self.fytf <= 70 and self.fybf <= 70:
@@ -293,12 +294,15 @@ class Section_Properties():
         return min(My_tf, My_bf)
     
 
-    # AASHTO 6.10.7.3
-    def check_ductility(self):
+    # Total depth of composite section
 
-        # Total depth of composite section
-        Dt = self.tslab + self.t_tf + self.D_web + self.t_bf
-    
+    def calc_total_depth_Dt(self):
+
+        return self.tslab + self.t_tf + self.D_web + self.t_bf
+
+    # Depth to PNA from top of deck
+    def calc_Dp (self):
+
         Y_bar,_,PNA_loc = self.PNA()
 
         Dp = Y_bar
@@ -308,4 +312,27 @@ class Section_Properties():
         elif PNA_loc == 'Web':
             Dp += self.tslab + self.t_tf
 
-        return Dp <= 0.42 * Dt
+        return Dp
+
+    # AASHTO 6.10.7.3
+    def check_ductility(self):
+
+        return self.calc_Dp() <= 0.42 * self.calc_total_depth_Dt()
+    
+    # AASHTO 6.10.7.1.2
+    def Calc_nominal_flex_Mn(self):
+
+        _, Mp, _ = self.PNA()
+
+        if self.check_compactness():
+            if self.calc_Dp() <= 0.1 * self.calc_total_depth_Dt():
+                return Mp
+            else:
+                return Mp * (1.07 - 0.7 * self.calc_Dp() / self.calc_total_depth_Dt())
+            
+            # add conditions for continuous spans 
+
+
+        else:
+            print('write for non-compact sections')
+
