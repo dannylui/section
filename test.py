@@ -20,14 +20,14 @@ Resist_factors_phi = {'phi_v':1.0,    # Shear
                       'phi_f':1.0 }   # Flexure
 
 Stiffener_Input = {'Panel':'Interior',      # End/ Interior only
-                   'Spacing d0': 300}       # Spacing in inches
+                   'Spacing d0': 200}       # Spacing in inches
   
 
 # Input materials and geometry
 Input = {'fyw':50, 'fy_tf':50, 'fy_bf':50, 'E':29000,
          'fc':4,
          'Long stiffener':'no', 'Trans stiffener': 'yes',      # Should be yes/no only 
-         'b_slab':114, 't_slab':9, 't_haunch':4, 
+         'b_slab':114, 't_slab':9, 't_haunch':3.5, 
          'b_tf':16, 't_tf':1.0, 
          'D_web':69, 't_web':0.5, 
          'b_bf':18, 't_bf':1.75}
@@ -40,10 +40,14 @@ modular_ratio_n = 8       # modular ratio, Es/Ec
 Import_factor = 1     # importance factor, essential, etc
 
 newSect = pac(Input)
-
+newSect.Calc_Elastic_Prop(0)
+newSect.Calc_Elastic_Prop(24)
 newSect.Calc_Elastic_Prop(8)
-newSect.chk_web_proportion()
-newSect.Calc_nominal_shear_Vn(Stiffener_Input)
+
+newSect.calc_PNA()
+newSect.yield_moment_My(Forces, 8, Import_factor)
+# newSect.chk_web_proportion()
+# newSect.Calc_Shear_buckling_k(Stiffener_Input)
 for i in newSect.output_list:
     print("====")
     print(i)

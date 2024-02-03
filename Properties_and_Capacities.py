@@ -37,9 +37,10 @@ class Section_Properties:
 
         self.output_list = []
 
-    
 
     def Calc_Elastic_Prop(self, n: int = 8):
+
+        # use n = 0 when doing section prop for negative flexure
 
         Section = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
                         'Width': [          self.bslab, self.b_tf,  self.t_web, self.b_bf],
@@ -105,7 +106,7 @@ class Section_Properties:
         # print(Modulus)
         # print(Inertia)
 
-        self.output_list.extend([Section, Inertia, Modulus])
+        self.output_list.extend([Section, f"Total I = {Inertia}", Modulus])
         
         return Section, Modulus, Inertia
 
@@ -158,7 +159,7 @@ class Section_Properties:
             return 5
         else:
             print("Calculate k per AASHTO 6.10.9.3.2-7")
-            self.output_list.append(f"Per AASHTO 6.10.9.3.2-7, k = {5 + 5 / (Stiff_input['Spacing d0'] / self.D_web) ** 2}")
+            self.output_list.append(f"Per AASHTO 6.10.9.3.2-7, k = 5 + 5 / ({Stiff_input['Spacing d0']} / {self.D_web}) ^ 2 = {5 + 5 / (Stiff_input['Spacing d0'] / self.D_web) ** 2}")
             return 5 + 5 / (Stiff_input['Spacing d0'] / self.D_web) ** 2
         
     # Calculate Shear-buckling resistance to the shear yield Strength
@@ -170,7 +171,7 @@ class Section_Properties:
         print("k=" + str(k))
 
         if self.D_web / self.t_web <= 1.12 * (self.Es * k / self.fyw) ** 0.5:
-            self.output_list.append("Calculate C per AASHTO 6.10.9.3.2-4, C = 1")
+            self.output_list.append("Per AASHTO 6.10.9.3.2-4, C = 1")
             print("Calculate C per AASHTO 6.10.9.3.2-4")
             return 1
         elif self.D_web / self.t_web < 1.4* (self.Es * k / self.fyw) ** 0.5:
@@ -212,6 +213,9 @@ class Section_Properties:
     # Ref AASHTO Table D6.1-1
     # conservative ignore rebars for now - to be implemented later *****
     def calc_PNA (self):
+        
+        self.output_list.append("Calculating PNA (AASHTO Table D6.1-1)")
+
         Ps = 0.85 * self.Fc * self.bslab * self.tslab        # Slab
         Pt = self.fybf * self.b_bf * self.t_bf              # Bottom Flange/ tension
         Pc = self.fytf * self.b_tf * self.t_tf              # Top Flange/ compression
@@ -223,6 +227,9 @@ class Section_Properties:
 
         if Pt + Pw >= Pc + Ps:      # in web
             print("PNA is in the web")
+
+            self.output_list.append("PNA is in the web")
+
             PNA_Loc = 'Web'
             Y_bar = self.D_web / 2 * ((Pt-Pc-Ps)/Pw+1)                   # PNA from the top of the web
         
@@ -239,8 +246,13 @@ class Section_Properties:
             print("Ybar = " + str(Y_bar))
             print("Mp = " + str(Mp))
 
+            self.output_list.append(f"Y bar = {Y_bar}")
+
         elif Pt + Pw + Pc >= Ps:    # in the top flange
             print("PNA is in the top flange")
+
+            self.output_list.append("PNA is in the top flange")
+            
             PNA_Loc = 'Top Flange'
             Y_bar = self.t_tf/2 * ((Pw + Pt - Ps)/Pc + 1)  
 
@@ -257,8 +269,13 @@ class Section_Properties:
             print("Ybar = " + str(Y_bar))
             print("Mp = " + str(Mp))
 
+            self.output_list.append(f"Y bar = {Y_bar}")
+
         else:
             print("PNA is in the deck")
+
+            self.output_list.append("PNA is in the deck")
+
             PNA_Loc = 'Slab'
 
             Y_bar = self.tslab  * (Pw + Pt + Pc)/Ps
@@ -275,12 +292,16 @@ class Section_Properties:
             print("Ybar = " + str(Y_bar))
             print("Mp = " + str(Mp))
 
+            self.output_list.append(f"Y bar = {Y_bar}")
+
         return Y_bar, Mp, PNA_Loc
     
     # AASHTO 6.10.6.2.2
     #***************** Revise to return True/False
     def check_compactness(self):
         
+        self.output_list.append("Check Compactness per AASHTO 6.10.6.2.2")
+
         if self.fytf <= 70 and self.fybf <= 70:
             print ("Flange strength is ok")
         else:
@@ -305,6 +326,8 @@ class Section_Properties:
     
     def yield_moment_My (self, Forces_input, n, eta):
 
+        self.output_list.append("Calculate Yield Moment")
+
         _,S_NC,_ = self.Calc_Elastic_Prop(0)
         _,S_LT,_ = self.Calc_Elastic_Prop(3*n)
         _,S_ST,_ = self.Calc_Elastic_Prop(n)
@@ -327,6 +350,7 @@ class Section_Properties:
 
         My_tf = 1.25 * Forces_input['M_dc1'] + 1.25 * Forces_input['M_dc2'] + 1.5 * Forces_input['M_dw'] + MAD_tf
 
+        self.output_list.append(f"Yield Moment ={min(My_tf, My_bf)}")
         return min(My_tf, My_bf)
     
 
@@ -352,11 +376,14 @@ class Section_Properties:
 
     # AASHTO 6.10.7.3
     def check_ductility(self):
-
+        self.output_list.append("Check ductility per AASHTO 6.10.7.3")
+        
         return self.calc_Dp() <= 0.42 * self.calc_total_depth_Dt()
     
     # AASHTO 6.10.7.1.2
     def Calc_nominal_flex_Mn(self, span='simp'): #Simple vs cont
+
+        self.output_list.append("Calculate nominal flexural capacity Mn (AASHTO 6.10.7.1.2)")
 
         _, Mp, _ = self.calc_PNA()
 
@@ -392,10 +419,14 @@ class Section_Properties:
 
 
     def calc_rt_for_LTB(self):
+        # effective radius of gyration for lateral–torsional buckling (in.)
 
         return self.b_tf / math.sqrt(12 * (1+ 1/3 * (self.calc_Dc() * self.t_web) / (self.b_tf * self.t_tf)))
     
     def calc_Dc(self):
+        # depth of the web in compression in the elastic range (in.). 
+        # For composite sections, Dc shall be determined as specified in Article D6.3.1.
         
         # Provide Calcs
         return 36.96
+
