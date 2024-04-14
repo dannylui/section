@@ -1,4 +1,5 @@
 # import pandas as pd
+# from ShearCheck import Shear_Check as pac
 from Properties_and_Capacities import Section_Properties as pac
 
 # Section = pd.DataFrame({'Element':["Slab","Top Flange","Web","Bottom Flange"],
@@ -19,7 +20,7 @@ from Properties_and_Capacities import Section_Properties as pac
 Resist_factors_phi = {'phi_v':1.0,    # Shear
                       'phi_f':1.0 }   # Flexure
 
-Stiffener_Input = {'Panel':'Interior',      # End/ Interior only
+Stiffener_Info = {'Panel':'Interior',      # End/ Interior only
                    'Spacing d0': 200}       # Spacing in inches
   
 
@@ -40,14 +41,15 @@ modular_ratio_n = 8       # modular ratio, Es/Ec
 Import_factor = 1     # importance factor, essential, etc
 
 newSect = pac(Input)
-newSect.Calc_Elastic_Prop(0)
-newSect.Calc_Elastic_Prop(24)
-newSect.Calc_Elastic_Prop(8)
+# newSect.Calc_Elastic_Prop(0)
+# newSect.Calc_Elastic_Prop(24)
+# newSect.Calc_Elastic_Prop(8)
 
-newSect.calc_PNA()
-newSect.yield_moment_My(Forces, 8, Import_factor)
+# newSect.calc_PNA()
+# newSect.yield_moment_My(Forces, 8, Import_factor)
 # newSect.chk_web_proportion()
-# newSect.Calc_Shear_buckling_k(Stiffener_Input)
-for i in newSect.output_list:
-    print("====")
-    print(i)
+print(newSect.calc_Sxt(Forces,8,1))
+
+# for i in newSect.output_list:
+#     print("====")
+#     print(i)
